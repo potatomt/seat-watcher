@@ -139,9 +139,29 @@ Copy `.env.example` to `.env` to override these (all optional):
 | `PORT`         | `5173`               | Port the Express server binds on `127.0.0.1`.           |
 | `NTFY_TOPIC`   | unset (disabled)     | ntfy.sh topic for push notifications on section opens.  |
 | `POLL_MINUTES` | unset (uses `targets.json`'s `pollIntervalSeconds`) | Poll interval in minutes; overrides `targets.json` when set. |
+| `PROXY_URL`    | unset (direct connection) | Proxy for the scraper's browser, e.g. `socks5://127.0.0.1:1055`. See below. |
 
 `.env` is gitignored (along with `node_modules/` and `history.log`) — it's
 per-deployment, not something to commit.
+
+### Proxy (`PROXY_URL`)
+
+Edugate is geo-restricted to Saudi Arabia. If this server runs somewhere
+else, set `PROXY_URL` to route the scraper's browser through something
+inside the country — a Tailscale exit node is a natural fit if you already
+have a machine on a Saudi network/VPN:
+
+```
+PROXY_URL=socks5://127.0.0.1:1055
+```
+
+Passed straight to Playwright as `proxy: { server: PROXY_URL }`. Leave unset
+to connect directly, which is the normal case for local dev when you're
+already on a Saudi network/VPN — startup logs `proxy: none` either way so
+it's obvious which mode is active. The portal is noticeably slower through a
+proxy, so navigation timeouts are set to 60s (up from Playwright's 30s
+default); a timeout there is treated the same as any other failed cycle —
+logged, retried once, and never crashes the process.
 
 ## Files
 
