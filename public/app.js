@@ -4,6 +4,8 @@
   const POLL_MS = 5000;
 
   const cardsEl = document.getElementById('cards');
+  const emptyStateEl = document.getElementById('empty-state');
+  const emptyStateManageBtn = document.getElementById('empty-state-manage-btn');
   const headerEl = document.getElementById('header');
   const lastCheckedEl = document.getElementById('last-checked');
   const relativeTimeEl = document.getElementById('relative-time');
@@ -22,6 +24,11 @@
   const searchStatusEl = document.getElementById('search-status');
   const searchResultsEl = document.getElementById('search-results');
   const addSelectedBtn = document.getElementById('add-selected-btn');
+  const targetsCapEl = document.getElementById('targets-cap');
+
+  const ntfyTopicInput = document.getElementById('ntfy-topic-input');
+  const saveNtfyBtn = document.getElementById('save-ntfy-btn');
+  const ntfyStatusEl = document.getElementById('ntfy-status');
 
   let armed = false;
   let audioCtx = null;
@@ -31,6 +38,8 @@
   let lastStatus = null;
   let nextCheckAtMs = null;
   let lastSearch = null; // { course, department, sections }
+  let myTargets = []; // clean {course, seqs} list — the source of truth for edits
+  let maxTargets = 15;
 
   // ---- WebAudio alarm ----
 
@@ -106,13 +115,22 @@
 
   // ---- Buttons ----
 
-  armBtn.addEventListener('click', () => {
+  armBtn.addEventListener('click', async () => {
     getAudioCtx();
     // tiny silent blip to fully unlock audio on this gesture
     beepOnce(0.0001);
     armed = true;
     armBtn.textContent = 'Armed ✅';
     armBtn.classList.add('armed');
+    try {
+      await fetch('/api/armed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ armed: true }),
+      });
+    } catch (e) {
+      // local arming already took effect; server sync can lag without harm
+    }
   });
 
   testBtn.addEventListener('click', () => {
@@ -123,11 +141,22 @@
 
   ackBtn.addEventListener('click', async () => {
     stopAlarm();
+    if (!lastStatus) return;
+    const alarmingSeqs = lastStatus.targets.flatMap((t) => t.rows.filter((r) => r.alarm).map((r) => r.seq));
     try {
-      await fetch('/acknowledge', { method: 'POST' });
+      await Promise.all(
+        alarmingSeqs.map((seq) =>
+          fetch('/api/acknowledge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seq }),
+          })
+        )
+      );
     } catch (e) {
-      // will retry naturally on next poll if this fails
+      // next poll will just show the alarm again if this failed — safe default
     }
+    await poll();
   });
 
   // ---- Rendering ----
@@ -160,6 +189,14 @@
   }
 
   function renderCards(targets) {
+    const isEmpty = targets.length === 0;
+    emptyStateEl.classList.toggle('hidden', !isEmpty);
+    cardsEl.classList.toggle('hidden', isEmpty);
+    if (isEmpty) {
+      cardsEl.innerHTML = '';
+      return;
+    }
+
     cardsEl.innerHTML = '';
     for (const target of targets) {
       const card = document.createElement('div');
@@ -263,7 +300,7 @@
 
   function openManage() {
     manageOverlay.classList.remove('hidden');
-    if (lastStatus) renderManageCurrent(lastStatus.targets);
+    renderManageCurrent();
   }
 
   function closeManage() {
@@ -276,21 +313,25 @@
   }
 
   manageBtn.addEventListener('click', openManage);
+  emptyStateManageBtn.addEventListener('click', openManage);
   manageCloseBtn.addEventListener('click', closeManage);
   manageOverlay.addEventListener('click', (e) => {
     if (e.target === manageOverlay) closeManage();
   });
 
-  function renderManageCurrent(targets) {
+  function renderManageCurrent() {
     manageCurrentEl.innerHTML = '';
-    if (!targets.length) {
+    const totalSeqs = myTargets.reduce((n, t) => n + t.seqs.length, 0);
+    targetsCapEl.textContent = `${totalSeqs} / ${maxTargets} seqs watched`;
+
+    if (!myTargets.length) {
       const p = document.createElement('p');
       p.className = 'muted';
-      p.textContent = 'Nothing being watched yet.';
+      p.textContent = 'Nothing being watched yet — add a course below.';
       manageCurrentEl.appendChild(p);
       return;
     }
-    for (const target of targets) {
+    for (const target of myTargets) {
       const block = document.createElement('div');
       block.className = 'manage-course';
 
@@ -312,17 +353,21 @@
       const seqList = document.createElement('div');
       seqList.className = 'manage-seq-list';
 
-      for (const row of target.rows) {
+      // pull live status for display if we have it, purely cosmetic
+      const statusTarget = lastStatus && lastStatus.targets.find((t) => t.course === target.course);
+
+      for (const seq of target.seqs) {
+        const liveRow = statusTarget && statusTarget.rows.find((r) => r.seq === seq);
         const chip = document.createElement('span');
         chip.className = 'seq-chip';
 
         const label = document.createElement('span');
-        label.textContent = `${row.seq}${row.status ? ' · ' + row.status : ''}`;
+        label.textContent = `${seq}${liveRow && liveRow.status ? ' · ' + liveRow.status : ''}`;
 
         const removeBtn = document.createElement('button');
         removeBtn.textContent = '✕';
-        removeBtn.title = `Remove seq ${row.seq}`;
-        removeBtn.addEventListener('click', () => doRemoveSeq(target.course, row.seq));
+        removeBtn.title = `Remove seq ${seq}`;
+        removeBtn.addEventListener('click', () => doRemoveSeq(target.course, seq));
 
         chip.appendChild(label);
         chip.appendChild(removeBtn);
@@ -334,14 +379,25 @@
     }
   }
 
+  async function replaceTargets(newTargets) {
+    const res = await fetch('/api/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets: newTargets }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to save targets');
+    myTargets = data.targets;
+    return data.targets;
+  }
+
   async function doRemoveSeq(course, seq) {
     try {
-      const res = await fetch('/targets/remove-seq', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ course, seq }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to remove');
+      const newTargets = myTargets
+        .map((t) => (t.course === course ? { course: t.course, seqs: t.seqs.filter((s) => s !== seq) } : t))
+        .filter((t) => t.seqs.length > 0);
+      await replaceTargets(newTargets);
+      renderManageCurrent();
       await poll();
     } catch (e) {
       searchStatusEl.textContent = 'Could not remove: ' + e.message;
@@ -350,12 +406,9 @@
 
   async function doRemoveCourse(course) {
     try {
-      const res = await fetch('/targets/remove-course', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ course }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to remove');
+      const newTargets = myTargets.filter((t) => t.course !== course);
+      await replaceTargets(newTargets);
+      renderManageCurrent();
       await poll();
     } catch (e) {
       searchStatusEl.textContent = 'Could not remove: ' + e.message;
@@ -363,9 +416,8 @@
   }
 
   function alreadyWatchedSeqs(course) {
-    if (!lastStatus) return new Set();
-    const target = lastStatus.targets.find((t) => t.course === course);
-    return new Set(target ? target.rows.map((r) => r.seq) : []);
+    const target = myTargets.find((t) => t.course === course);
+    return new Set(target ? target.seqs : []);
   }
 
   function renderSearchResults(course, department, sections) {
@@ -422,7 +474,7 @@
     lastSearch = null;
 
     try {
-      const res = await fetch(`/search-course?course=${encodeURIComponent(course)}`);
+      const res = await fetch(`/api/search-course?course=${encodeURIComponent(course)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
 
@@ -454,15 +506,20 @@
 
     addSelectedBtn.disabled = true;
     try {
-      const res = await fetch('/targets/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ course: lastSearch.course, department: lastSearch.department, seqs: checked }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to add');
+      const existing = myTargets.find((t) => t.course === lastSearch.course);
+      const newTargets = existing
+        ? myTargets.map((t) =>
+            t.course === lastSearch.course
+              ? { course: t.course, seqs: [...new Set([...t.seqs, ...checked])], department: lastSearch.department }
+              : t
+          )
+        : [...myTargets, { course: lastSearch.course, seqs: checked, department: lastSearch.department }];
+
+      await replaceTargets(newTargets);
       searchStatusEl.textContent = `Added ${checked.length} section(s) to ${lastSearch.course}. Checking status…`;
       await poll(); // refresh lastStatus first so the checklist can mark these as already-watching
       renderSearchResults(lastSearch.course, lastSearch.department, lastSearch.sections);
+      renderManageCurrent();
     } catch (e) {
       searchStatusEl.textContent = 'Error: ' + e.message;
     } finally {
@@ -470,10 +527,50 @@
     }
   });
 
+  // ---- Notification settings ----
+
+  saveNtfyBtn.addEventListener('click', async () => {
+    const val = ntfyTopicInput.value.trim();
+    saveNtfyBtn.disabled = true;
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ntfyTopic: val }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      ntfyStatusEl.textContent = data.ntfyTopic
+        ? `Saved — you'll get a push at ntfy.sh/${data.ntfyTopic} when a target opens.`
+        : 'Saved — push notifications off (add a topic to enable).';
+    } catch (e) {
+      ntfyStatusEl.textContent = 'Error: ' + e.message;
+    } finally {
+      saveNtfyBtn.disabled = false;
+    }
+  });
+
+  // ---- Bootstrapping + polling ----
+
+  async function loadTargets() {
+    try {
+      const res = await fetch('/api/targets');
+      const data = await res.json();
+      myTargets = data.targets || [];
+      maxTargets = data.maxTargets || 15;
+      ntfyTopicInput.value = data.ntfyTopic || '';
+      if (!myTargets.length) {
+        openManage();
+      }
+    } catch (e) {
+      // /api/status polling below will surface connectivity problems
+    }
+  }
+
   async function poll() {
     let data;
     try {
-      const res = await fetch('/status');
+      const res = await fetch('/api/status');
       data = await res.json();
     } catch (e) {
       return; // try again next tick
@@ -489,19 +586,20 @@
     renderCards(data.targets);
     updateHeaderClock();
     if (!manageOverlay.classList.contains('hidden')) {
-      renderManageCurrent(data.targets);
+      renderManageCurrent();
     }
 
     if (data.anyAlarm && armed && !alarmActive) {
       startAlarm(alarmLabel(data.targets));
     } else if (!data.anyAlarm && alarmActive) {
       stopAlarm();
-    } else if (data.anyAlarm && alarmActive) {
-      // keep title flash label current
     }
   }
 
-  poll();
-  setInterval(poll, POLL_MS);
-  setInterval(updateHeaderClock, 1000);
+  (async () => {
+    await loadTargets();
+    await poll();
+    setInterval(poll, POLL_MS);
+    setInterval(updateHeaderClock, 1000);
+  })();
 })();

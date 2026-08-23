@@ -23,6 +23,12 @@
 
   <main id="cards"></main>
 
+  <div id="empty-state" class="empty-state hidden">
+    <h2>Nothing watched yet</h2>
+    <p>This watchlist is tied to your browser — add a course to start getting alarms.</p>
+    <button id="empty-state-manage-btn" class="btn btn-add">⚙ Manage Targets</button>
+  </div>
+
   <footer>
     <button id="arm-btn" class="btn btn-arm">Arm alarm 🔔<br /><small>(needed once — browsers block sound until you click)</small></button>
     <button id="test-btn" class="btn btn-test">Test sound</button>
@@ -38,7 +44,10 @@
       </div>
 
       <section>
-        <h3>Currently watching</h3>
+        <div class="section-head-row">
+          <h3>Currently watching</h3>
+          <span id="targets-cap" class="muted small"></span>
+        </div>
         <div id="manage-current"></div>
       </section>
 
@@ -51,6 +60,20 @@
         <p id="search-status" class="muted"></p>
         <div id="search-results"></div>
         <button id="add-selected-btn" class="btn btn-add hidden">Add selected</button>
+      </section>
+
+      <section>
+        <h3>Notifications</h3>
+        <p class="muted">
+          Optional: get a push via <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy.sh</a>
+          when your target opens, even with this tab closed. Pick a private,
+          hard-to-guess topic name and subscribe to it in the ntfy app.
+        </p>
+        <div class="add-form">
+          <input id="ntfy-topic-input" type="text" placeholder="your-private-topic-name" autocomplete="off" />
+          <button id="save-ntfy-btn" class="btn btn-find">Save</button>
+        </div>
+        <p id="ntfy-status" class="muted"></p>
       </section>
     </div>
   </div>
