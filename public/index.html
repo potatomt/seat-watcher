@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Seat Watcher</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="header">
+    <div class="header-main">
+      <h1>Seat Watcher</h1>
+      <div class="header-status">
+        <span id="last-checked">Last checked: —</span>
+        <span id="relative-time" class="muted"></span>
+      </div>
+    </div>
+    <div class="header-sub">
+      <span id="countdown">Next check in —</span>
+      <span id="stale-warning" class="stale-warning hidden">⚠ Data is stale</span>
+    </div>
+  </header>
+
+  <main id="cards"></main>
+
+  <footer>
+    <button id="arm-btn" class="btn btn-arm">Arm alarm 🔔<br /><small>(needed once — browsers block sound until you click)</small></button>
+    <button id="test-btn" class="btn btn-test">Test sound</button>
+    <button id="manage-btn" class="btn btn-manage">⚙ Manage targets</button>
+    <button id="ack-btn" class="btn btn-ack hidden">Acknowledge</button>
+  </footer>
+
+  <div id="manage-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Manage targets</h2>
+        <button id="manage-close-btn" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+
+      <section>
+        <h3>Currently watching</h3>
+        <div id="manage-current"></div>
+      </section>
+
+      <section>
+        <h3>Add a course</h3>
+        <div class="add-form">
+          <input id="add-course-input" type="text" placeholder="e.g. MATH 202" autocomplete="off" />
+          <button id="find-sections-btn" class="btn btn-find">Find sections</button>
+        </div>
+        <p id="search-status" class="muted"></p>
+        <div id="search-results"></div>
+        <button id="add-selected-btn" class="btn btn-add hidden">Add selected</button>
+      </section>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

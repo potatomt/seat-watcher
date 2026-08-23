@@ -1,0 +1,19 @@
+{
+  "name": "seat-watcher",
+  "version": "1.0.0",
+  "description": "Local alarm when a JIC Edugate course section opens up.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node bin/start.js",
+    "server": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "playwright": "^1.62.1"
+  }
+}

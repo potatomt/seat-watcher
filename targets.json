@@ -1,0 +1,32 @@
+{
+  "campus": "1",
+  "campusLabel": "Jubail Industrial College",
+  "degree": "2",
+  "degreeLabel": "Bachelor",
+  "pollIntervalSeconds": 180,
+  "jitterSeconds": 30,
+  "targets": [
+    {
+      "course": "ENGL 213",
+      "department": "2-2-218-Instrumentation & Control Eng.",
+      "seqs": [
+        "1335"
+      ]
+    },
+    {
+      "course": "ICE 224",
+      "department": "2-2-218-Instrumentation & Control Eng.",
+      "seqs": [
+        "761",
+        "762"
+      ]
+    },
+    {
+      "course": "BUS 481",
+      "department": "2-2-218-Instrumentation & Control Eng.",
+      "seqs": [
+        "1268"
+      ]
+    }
+  ]
+}
